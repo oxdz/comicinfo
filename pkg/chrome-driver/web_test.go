@@ -1,3 +1,6 @@
+//go:build chrome_browser
+// +build chrome_browser
+
 package chromedriver
 
 import (
