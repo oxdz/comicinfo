@@ -44,7 +44,7 @@ func Start(cmd *cobra.Command, args []string) error {
 	ck := &chromedriver.Cookies{}
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
-		fmt.Printf("Please input url:\n")
+		fmt.Printf("Please input url: ")
 		for scanner.Scan() {
 			line := scanner.Text()
 			line = strings.TrimSpace(line)
@@ -53,7 +53,9 @@ func Start(cmd *cobra.Command, args []string) error {
 				if err := sh(ctx, ck, line); err != nil {
 					fmt.Println(err.Error())
 				}
+				fmt.Printf("Done!\n")
 			}
+			fmt.Printf("Please input url: ")
 		}
 
 		// 检查扫描过程中是否有错误
@@ -112,6 +114,7 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
 	fmt.Printf("save images to: %s\n", dst)
 
 	for i, url := range inf.PageList {
+		bar(i, len(inf.PageList))
 		r, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return err
@@ -157,6 +160,31 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
 			return err
 		}
 	}
-
+	bar(len(inf.PageList), len(inf.PageList))
 	return nil
+}
+
+func bar(currentPage, totalPages int) {
+	barLength := 50
+
+	percent := float64(currentPage) / float64(totalPages) * 100
+
+	filledLength := int(percent / 100 * float64(barLength))
+
+	bar := "["
+	for i := 0; i < barLength; i++ {
+		if i < filledLength {
+			bar += "="
+		} else if i == filledLength {
+			bar += ">"
+		} else {
+			bar += " "
+		}
+	}
+	bar += "]"
+
+	fmt.Printf("\r%s pages: %d/%d (%.1f%%)", bar, currentPage, totalPages, percent)
+	if currentPage == totalPages {
+		fmt.Println()
+	}
 }
