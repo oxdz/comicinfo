@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/oxdz/comicinfo/pkg/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -45,10 +46,7 @@ func newStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "start to get comic info",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprint(os.Stdout, "hello\n")
-			return nil
-		},
+		RunE:  cmd.Start,
 	}
 	return cmd
 }

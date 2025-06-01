@@ -3,10 +3,12 @@ package chromedriver
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 	"os"
-	"path/filepath"
+	"path"
+	"sync"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
@@ -36,38 +38,113 @@ var DefaultExecAllocatorOptions = [...]chromedp.ExecAllocatorOption{
 	chromedp.Flag("password-store", "basic"),
 	chromedp.Flag("use-mock-keychain", true),
 
+	chromedp.Flag("disable-gpu", true),
 	chromedp.Flag("enable-automation", false),
-	// chromedp.Flag("disable-blink-features", "AutomationControlled"),
+	chromedp.Flag("excludeSwitches", "enable-automation"),
 }
 
-func NewExecAllocatorCtx(dir string) (context.Context, context.CancelFunc, error) {
-	if dir == "" {
-		dir = "./ccinf-web-tmp-cache"
+func Dir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
 	}
-	if fsinf, err := os.Stat(dir); err != nil {
-		// log.Print(err)
-		_ = os.MkdirAll(dir, 0o755)
-	} else {
-		if !fsinf.IsDir() {
-			return nil, nil, fmt.Errorf("%s is not a directory", dir)
-		}
-	}
+	return path.Join(homeDir, "ccinf", ".chromedp")
+}
 
-	dir = filepath.Join(dir, "userdatadir")
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		if !os.IsExist(err) {
-			return nil, nil, fmt.Errorf("mkdir userdatadir err: %+v", err)
-		}
-	}
-
+func NewExecAllocatorCtx(dir string, headless bool) (context.Context, context.CancelFunc) {
 	opts := append(DefaultExecAllocatorOptions[:],
 		chromedp.DisableGPU,
-		chromedp.UserDataDir(dir),
-	)
+		chromedp.Flag("headless", headless))
+
+	if dir != "" {
+		opts = append(opts, chromedp.UserDataDir(dir))
+	}
 
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts[:]...)
 
-	// also set up a custom logger
+	return allocCtx, cancel
+}
 
-	return allocCtx, cancel, nil
+func NewChromeContext(headless bool) (context.Context, context.CancelFunc) {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", headless), // 禁用无头模式
+		chromedp.Flag("disable-gpu", true),
+		// chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("enable-automation", false),
+		// chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.Flag("excludeSwitches", "enable-automation"),
+	)
+
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(
+		context.Background(), opts...)
+
+	// create chrome instance
+	ctx, cancel := chromedp.NewContext(
+		allocCtx,
+		// chromedp.WithDebugf(log.Printf),
+	)
+
+	return ctx, func() { cancel(); cancelAlloc() }
+}
+
+type Cookies struct {
+	Domain map[string]int
+	KVs    []map[[2]string]*http.Cookie
+	sync.Mutex
+}
+
+func (c *Cookies) Add(v network.Cookie) {
+	c.Lock()
+	defer c.Unlock()
+	if c.Domain == nil {
+		c.Domain = make(map[string]int)
+	}
+
+	if _, ok := c.Domain[v.Domain]; !ok {
+		c.Domain[v.Domain] = len(c.KVs)
+		c.KVs = append(c.KVs, map[[2]string]*http.Cookie{{
+			v.Name, v.Path,
+		}: &http.Cookie{
+			Name:   v.Name,
+			Value:  v.Value,
+			Path:   v.Path,
+			Domain: v.Domain,
+			Secure: v.Secure,
+		}})
+	} else {
+		c.KVs[c.Domain[v.Domain]][[2]string{
+			v.Name, v.Path}] = &http.Cookie{
+			Name:   v.Name,
+			Value:  v.Value,
+			Path:   v.Path,
+			Domain: v.Domain,
+			Secure: v.Secure,
+		}
+	}
+}
+
+func (c *Cookies) ActionFunc() chromedp.ActionFunc {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		cookies, err := network.GetCookies().Do(ctx)
+		if err != nil {
+			return err
+		}
+		for _, cookie := range cookies {
+			c.Add(*cookie)
+		}
+		return nil
+	})
+}
+
+func (c *Cookies) GetAll(domain ...string) (r []*http.Cookie) {
+	c.Lock()
+	defer c.Unlock()
+	for _, domain := range domain {
+		if v, ok := c.Domain[domain]; ok {
+			for _, v := range c.KVs[v] {
+				r = append(r, v)
+			}
+		}
+	}
+	return r
 }

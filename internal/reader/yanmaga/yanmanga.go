@@ -12,7 +12,7 @@ import (
 var _ reader.ComicReader = (*Viewer)(nil)
 
 const (
-	defaultRandomStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	randomRangeStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 )
 
 type Viewer struct {
@@ -32,7 +32,7 @@ func (v *Viewer) DownloadPags(ctx context.Context, url string) (<-chan *reader.P
 
 func randomStr(n int, s string) string {
 	if s == "" {
-		s = defaultRandomStr
+		s = randomRangeStr
 	}
 
 	var r string
@@ -47,7 +47,7 @@ func randomStr(n int, s string) string {
 	return r
 }
 
-func randomK(cid string) string {
+func randomPramaK(cid string) string {
 	var li string
 	for i := 0; i < int(math.Ceil(16.0/float64(len(cid)))); i++ {
 		li += cid
@@ -63,14 +63,14 @@ func randomK(cid string) string {
 	}
 
 	var v [3]int
-	str := randomStr(16, defaultRandomStr)
+	str := randomStr(16, randomRangeStr)
 
 	var ret string
 	for i, c := range []byte(str) {
 		v[0] ^= int(c)
 		v[1] ^= int(subH[i])
 		v[2] ^= int(subT[i])
-		ret += string(c) + string(defaultRandomStr[(v[0]+v[1]+v[2])&63])
+		ret += string(c) + string(randomRangeStr[(v[0]+v[1]+v[2])&63])
 	}
 
 	return ret
