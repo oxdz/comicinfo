@@ -9,12 +9,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/signal"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -41,13 +39,10 @@ func Start(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTSTP)
 	fmt.Printf("Press Ctrl+Z to exit\n")
 
 	ck := &chromedriver.Cookies{}
-
-	go func() {
+	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		fmt.Printf("Please input url:\n")
 		for scanner.Scan() {
@@ -65,11 +60,7 @@ func Start(cmd *cobra.Command, args []string) error {
 		if err := scanner.Err(); err != nil {
 			fmt.Printf("scanner error: %v\n", err)
 		}
-	}()
-
-	<-sig
-
-	return nil
+	}
 }
 
 func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
