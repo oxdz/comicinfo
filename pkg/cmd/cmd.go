@@ -19,7 +19,6 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/oxdz/comicinfo/internal/reader/shonenmagazine"
 	chromedriver "github.com/oxdz/comicinfo/pkg/chrome-driver"
-	"github.com/oxdz/comicinfo/pkg/decode"
 	"github.com/spf13/cobra"
 )
 
@@ -118,7 +117,7 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url, basedir string) erro
 		return fmt.Errorf("failed to open url(%s): %w", url, err)
 	}
 
-	var inf *decode.EpisodeInfo
+	var inf *shonenmagazine.Episode
 	for range 3 {
 		id, _ := strconv.Atoi(m[2])
 		inf, err = shonenmagazine.EpisodeInfo(ctx, id,

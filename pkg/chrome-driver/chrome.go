@@ -104,7 +104,7 @@ func (c *Cookies) Add(v network.Cookie) {
 		c.Domain[v.Domain] = len(c.KVs)
 		c.KVs = append(c.KVs, map[[2]string]*http.Cookie{{
 			v.Name, v.Path,
-		}: &http.Cookie{
+		}: {
 			Name:   v.Name,
 			Value:  v.Value,
 			Path:   v.Path,
