@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   release:
     types: [ created ]
+    tags: [ 'v*' ]
 
 jobs:
   build:
