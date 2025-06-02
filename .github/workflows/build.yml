@@ -35,7 +35,7 @@ jobs:
           GOEXE: ${{ matrix.os == 'windows' && '.exe' || '' }}
         run: |
           mkdir -p dist
-          go build -o dist/ccinf-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} \
+          go build -o dist/ccinf-${{ matrix.os }}-${{ matrix.arch }}/ccinf${{ matrix.os == 'windows' && '.exe' || '' }} \
             -ldflags="-s -w" \
             ./cmd/ccinf
 
@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ccinf-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/ccinf-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
+          path: dist/ccinf-${{ matrix.os }}-${{ matrix.arch }}/ccinf${{ matrix.os == 'windows' && '.exe' || '' }}
           if-no-files-found: error
 
   release:
