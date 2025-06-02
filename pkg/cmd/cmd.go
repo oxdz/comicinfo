@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"regexp"
 	"strconv"
@@ -28,7 +29,7 @@ var (
 
 func Start(cmd *cobra.Command, args []string) error {
 	dir := chromedriver.Dir()
-	fmt.Printf("chrome user data saved to dir: `%s`\n", dir)
+	fmt.Printf("Chrome user data saved to dir: `%s`\n", dir)
 	ctx, alloccancel := chromedriver.NewExecAllocatorCtx(dir, false)
 	defer alloccancel()
 
@@ -39,35 +40,70 @@ func Start(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Press Ctrl+Z to exit\n")
+	fmt.Printf("Press Ctrl+C to exit\n\n")
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
 
 	ck := &chromedriver.Cookies{}
+	lnCh, errCh := Scanner(os.Stdin)
+
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		homedir = "."
+	}
+	baseDir := path.Join(homedir, "ccinf")
+	imageBaseDir := path.Join(baseDir, "images")
+
 	for {
-		scanner := bufio.NewScanner(os.Stdin)
-		fmt.Printf("Please input url: ")
-		for scanner.Scan() {
-			line := scanner.Text()
-			line = strings.TrimSpace(line)
+		fmt.Printf("url: ")
+		select {
+		case err := <-errCh:
+			return err
+		case <-sig:
+			fmt.Printf("\nExit!\n")
+			return nil
+		case line := <-lnCh:
+			if line == "" {
+				continue
+			}
 			switch {
 			case shonenmagazineRe.MatchString(line):
-				if err := sh(ctx, ck, line); err != nil {
+				if err := sh(ctx, ck, line, imageBaseDir); err != nil {
 					fmt.Println(err.Error())
 				}
 				fmt.Printf("Done!\n")
 			}
-			fmt.Printf("Please input url: ")
-		}
-
-		// 检查扫描过程中是否有错误
-		if err := scanner.Err(); err != nil {
-			fmt.Printf("scanner error: %v\n", err)
 		}
 	}
 }
 
-func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
+func Scanner(r io.Reader) (<-chan string, <-chan error) {
+	ch := make(chan string)
+	errCh := make(chan error, 1)
+	scanner := bufio.NewScanner(r)
+	go func() {
+		defer close(errCh)
+		defer close(ch)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			line = strings.TrimSpace(line)
+			ch <- line
+		}
+
+		err := scanner.Err()
+		if err != nil {
+			err = fmt.Errorf("scanner error: %w", err)
+		}
+		errCh <- err
+	}()
+	return ch, errCh
+}
+
+func sh(ctx context.Context, ck *chromedriver.Cookies, url, basedir string) error {
 	m := shonenmagazineRe.FindStringSubmatch(url)
 	var err error
+
 	for range 3 {
 		if err = chromedp.Run(ctx,
 			chromedp.Navigate(url),
@@ -78,7 +114,6 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
 			break
 		}
 	}
-
 	if err != nil {
 		return fmt.Errorf("failed to open url(%s): %w", url, err)
 	}
@@ -89,13 +124,11 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
 		inf, err = shonenmagazine.EpisodeInfo(ctx, id,
 			ck.GetAll(".shonenmagazine.com", ".pocket.shonenmagazine.com"))
 		if err != nil {
-			fmt.Println(err.Error())
 			time.Sleep(time.Second)
 		} else {
 			break
 		}
 	}
-
 	if err != nil {
 		return fmt.Errorf("failed to get episode(%s) info: %w", m[2], err)
 	}
@@ -104,14 +137,9 @@ func sh(ctx context.Context, ck *chromedriver.Cookies, url string) error {
 		return fmt.Errorf("failed to get episode(%s) info", m[2])
 	}
 
-	homedir, err := os.UserHomeDir()
-	if err != nil {
-		homedir = "."
-	}
-
-	dst := path.Join(homedir, "ccinf/images", m[1], m[2])
+	dst := path.Join(basedir, m[1], m[2])
 	os.MkdirAll(dst, 0755)
-	fmt.Printf("save images to: %s\n", dst)
+	fmt.Printf("save images to: `%s`\n", dst)
 
 	for i, url := range inf.PageList {
 		bar(i, len(inf.PageList))
@@ -185,6 +213,6 @@ func bar(currentPage, totalPages int) {
 
 	fmt.Printf("\r%s pages: %d/%d (%.1f%%)", bar, currentPage, totalPages, percent)
 	if currentPage == totalPages {
-		fmt.Println()
+		fmt.Printf("\n")
 	}
 }
